@@ -26,10 +26,12 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
-# 构建产物 / 发行包 (release/ 含 zip, 不进版本控制; 发布走 GitHub Release)
+# 构建中间产物 (含本机绝对路径与调试截图) —— 绝不入库
 build/
-release/
-*.exe
+
+# 发行 zip 走 GitHub Release 附件, 不重复入库;
+# 但 release/ 下解压好的成品目录要入库, 让用户从仓库直接下载即可运行
+release/*.zip
 
 # 存档快照 (未来的 M3 产物): 含 SteamID 与全部游戏进度, 只存本地
 snapshots/

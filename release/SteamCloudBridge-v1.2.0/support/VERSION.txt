@@ -1,0 +1,46 @@
+SteamCloudBridge 1.2.0
+
+构建时间   : 2026-10-14 22:13:39
+Windows exe: （已包含 3/3，免装 Python）
+
+这个文件夹里怎么摆的:
+
+  RUN-GUI.bat                   <== 平时就双击这个
+  SteamCloudBridgeGUI.exe           向导本体 (和启动器并排)
+  support\                        其余全部文件都收在这里面
+
+工具说明 (都在 support\ 里):
+
+  图形向导 (RUN-GUI.bat / SteamCloudBridgeGUI.exe)   <== 平时就用这个
+      双击打开一个窗口, 左边五步, 跟着点就行, 不用记任何命令:
+        1 检查环境  2 备份存档  3 每次玩之前  4 遇到问题  5 魂2 存档
+      只有你点'备份'或'导入'时才会写盘。
+
+      第 5 步说明: 魂二(黑暗之魂2)本身没有 Steam 云存档 ——
+      不是设置没开, 是游戏没这个功能, 也没有开关可点。
+      所以它把存档导出成一个文件夹, 放进你的网盘同步目录或 U 盘,
+      换台机器再导入回来。同样只搬字节, 不读不改存档内容。
+
+  探测器 (RUN-PROBE.bat / SteamCloudBridgeProbe.py)
+      只读: 枚举本机 Steam 云存, 产出脱敏报告 (可安全公开)。
+      不读取/修改真实存档内容, 不改 Steam 文件, 默认不联网。
+
+  搬运器 (RUN-BRIDGE.bat / SteamCloudBridgeBridge.py)
+      M2/M3 搬运: 把一份你自己账号的 .sl2 放到正确位置, 可选推上云。
+      会写盘, 但: 需输入 YES 才写; 写入前强制备份 + 拍快照;
+                Steam 运行中直接拒绝; 跨账号直接拒绝;
+                写坏可用 rollback 子命令退回 (见 README.md)。
+
+      魂二用同一条命令行的另外三个子命令 (同样只搬字节):
+          save-status                       看魂二存档在哪 (只读)
+          save-out --to <文件夹>            导出成一个包
+          save-in  --from <文件夹> --yes    导回来 (写前强制备份)
+      不加 --yes 就是只检查不写盘。详见 README.md 第六节。
+
+  日常入口 (RUN-SYNC.bat) —— 不想开窗口时用这个
+      每次要玩之前双击一次: 点亮本会话云通道 + 帮你启动游戏。
+      手敲那两行的抄写卡在 support\README.md 第三节。
+
+边界: 只搬同账号自己存档的字节; 不解析存档内容; 不改 Steam 安装目录。
+
+全部说明: support\README.md (包里唯一一份文档)。
