@@ -1,0 +1,56 @@
+# 忽略本地扫描产物 —— 报告含账号 ID 与本机绝对路径, 绝不入库
+reports/
+*.report.md
+*.report.json
+
+# 跨机往返的运行产物 (含账号名/真实档 sha1, 属"机器事实") 不入库
+xfer-out/
+xfer-backup/
+xfer-restore/
+reports-cross/
+
+# 本机适配器: 由探测档生成, 含本机绝对路径, 属于"机器事实"不入库
+# (脱敏档生成的模板适配器也不入库, 避免与源码里的适配器定义混淆)
+adapters/
+machine_profile*.json
+machine_profile*.md
+machine_profile*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 构建产物 / 发行包 (release/ 含 zip, 不进版本控制; 发布走 GitHub Release)
+build/
+release/
+*.exe
+
+# 存档快照 (未来的 M3 产物): 含 SteamID 与全部游戏进度, 只存本地
+snapshots/
+*.sl2
+*.co2
+*.ds3os
+
+# 图形向导做的存档备份: 与 snapshots 同理, 含全部游戏进度, 只存本地
+save-backup/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+
+# ===== 发布前补充 (2026-10-14) —— 以下目录绝不入库 =====
+# private/ : 真实存档 (DS30000.sl2) + 历史发行包
+# cases/   : 实测案例, 含朋友真实 SteamID (76561198453368063) 及其机器绝对路径
+private/
+cases/
+
+# 内部技术笔记: 含本机绝对路径 (C:\Users\<user>\AppData\...) —— 仅本地保留
+docs/
