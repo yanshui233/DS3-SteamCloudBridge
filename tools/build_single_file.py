@@ -59,6 +59,7 @@ SRC_MODULES: list[tuple[str, str]] = [
     ("src.steam", "src/steam/__init__.py"),
     ("src.steam.accounts", "src/steam/accounts.py"),
     ("src.steam.cloud_log", "src/steam/cloud_log.py"),
+    ("src.i18n", "src/i18n.py"),
     ("src.steam.discovery", "src/steam/discovery.py"),
     ("src.steam.launch", "src/steam/launch.py"),
     ("src.steam.localconfig", "src/steam/localconfig.py"),

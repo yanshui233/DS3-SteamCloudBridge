@@ -8,6 +8,7 @@
 """
 
 from __future__ import annotations
+from .. import i18n
 
 from typing import Callable
 
@@ -122,6 +123,43 @@ def paragraph(parent: tk.Misc, text: str, *, bg: str | None = None, dim: bool = 
     )
 
 
+# ---------------------------------------------------------------- 语言选择
+
+
+def lang_switch(
+    parent: tk.Misc,
+    current: str,
+    on_pick: Callable[[str], None],
+    *,
+    bg: str | None = None,
+) -> tk.Frame:
+    """语言选择器: 几个并列的小标签, 当前语言高亮.
+
+    为什么是两个并列的标签而不是下拉菜单: 只有两三种语言时, 下拉要多点一次才能看到
+    选项 —— 而"这软件能不能切语言"恰恰是第一次打开就该被看见的事. 并列写法一眼就懂,
+    也不用碰 ttk (ttk 会把配色交给系统主题, 见本模块开头那段).
+    """
+    host = tk.Frame(parent, bg=bg or C["surface"])
+    base = bg or C["surface"]
+    for i, code in enumerate(i18n.LANGS):
+        active = code == current
+        label = tk.Label(
+            host,
+            text=i18n.LANG_LABEL.get(code, code),
+            font=theme.fonts().small_bold if active else theme.fonts().small,
+            bg=C["accent_soft"] if active else base,
+            fg=C["accent_ink"] if active else C["text_faint"],
+            padx=10, pady=3, cursor="hand2" if not active else "arrow",
+        )
+        label.pack(side="left", padx=(0 if i == 0 else 2, 0))
+        if not active:
+            # 悬停后要回到**本来的底色**, 不是回到某个"正常色"常量 —— 这条选择器
+            # 会出现在顶栏 (surface) 上, 底色是调用方给的.
+            _bind_hover(label, base, C["sidebar_hover"])
+            label.bind("<Button-1>", lambda _e, c=code: on_pick(c))
+    return host
+
+
 # ---------------------------------------------------------------- 状态色
 
 
@@ -173,7 +211,7 @@ class StatusRow(tk.Frame):
         self.name.configure(text=label)
         self.detail.configure(text=detail)
         if fix:
-            self.fix.configure(text="建议: " + fix)
+            self.fix.configure(text=i18n.t("建议: ") + fix)
             self.fix.grid()
         else:
             self.fix.grid_remove()
@@ -207,7 +245,7 @@ class CommandBox(tk.Frame):
         self.entry.configure(state="readonly")
         self.entry.grid(row=0, column=0, sticky="ew", padx=14, pady=12)
 
-        self.copy_btn = ghost_button(self, "复制", self.copy, small=True)
+        self.copy_btn = ghost_button(self, i18n.t("复制"), self.copy, small=True)
         self.copy_btn.grid(row=0, column=1, sticky="w", padx=(10, 0))
 
     def set_text(self, text: str) -> None:
@@ -218,8 +256,8 @@ class CommandBox(tk.Frame):
         try:
             self.clipboard_clear()
             self.clipboard_append(text)
-            self.copy_btn.configure(text="已复制")
-            self.after(1400, lambda: self.copy_btn.configure(text="复制"))
+            self.copy_btn.configure(text=i18n.t("已复制"))
+            self.after(1400, lambda: self.copy_btn.configure(text=i18n.t("复制")))
         except tk.TclError:
             pass
 

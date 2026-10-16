@@ -10,6 +10,7 @@
 """
 
 from __future__ import annotations
+from .. import i18n
 
 import hashlib
 import os
@@ -216,11 +217,11 @@ def ac_root_from_save_path(save_path: Path | None) -> tuple[Path | None, str]:
             continue
         root = base / rel.parts[0]
         if root.is_dir():
-            return root, f"按落点反推 · {label} 下第一层"
+            return root, i18n.t('按落点反推 · {0} 下第一层').format(label)
 
     parent = resolved.parent
     if parent.is_dir():
-        return parent, "仅落点所在目录 · 未能确定云同步范围"
+        return parent, i18n.t("仅落点所在目录 · 未能确定云同步范围")
     return None, ""
 
 
@@ -247,7 +248,7 @@ def inspect(appid: str = DEFAULT_APPID, *, steam_root: Path | str | None = None)
     if steam_root is not None:
         inst = discovery.SteamInstall(root=Path(steam_root), source="--steam-root")
         if not inst.root.is_dir():
-            env.error = f"指定的 Steam 目录不存在: {inst.root}"
+            env.error = i18n.t('指定的 Steam 目录不存在: {0}').format(inst.root)
             return env
         inst.libraries = _safe(lambda: discovery.load_libraries(inst), []) or []
         installs = [inst]
@@ -255,14 +256,14 @@ def inspect(appid: str = DEFAULT_APPID, *, steam_root: Path | str | None = None)
         installs = _safe(discovery.find_installations, []) or []
 
     if not installs:
-        env.error = "找不到 Steam 安装目录"
-        env.checks.append(Check("Steam 安装", BAD, "没有在本机找到 Steam", "先安装并登录 Steam"))
+        env.error = i18n.t("找不到 Steam 安装目录")
+        env.checks.append(Check(i18n.t("Steam 安装"), BAD, i18n.t("没有在本机找到 Steam"), i18n.t("先安装并登录 Steam")))
         return env
 
     install = installs[0]
     env.install = install
     env.steam_root = install.root
-    env.checks.append(Check("Steam 安装", OK, str(_short(install.root))))
+    env.checks.append(Check(i18n.t("Steam 安装"), OK, str(_short(install.root))))
 
     # 账号: 注册表 ActiveUser 常为 0, 用 userdata 兜底 (与 CLI 完全同一套)
     accountid = _safe(accounts.get_active_accountid)
@@ -301,24 +302,24 @@ def inspect(appid: str = DEFAULT_APPID, *, steam_root: Path | str | None = None)
         env.notes.extend(resolution.notes or [])
         env.checks.append(
             Check(
-                "存档位置",
+                i18n.t("存档位置"),
                 OK if primary is not None else WARN,
-                str(_short(primary.abs_path)) if primary else "没能确定存档在哪儿",
-                "" if primary else "先按第三步点亮一次云通道, 再回来刷新",
+                str(_short(primary.abs_path)) if primary else i18n.t("没能确定存档在哪儿"),
+                "" if primary else i18n.t("先按第三步点亮一次云通道, 再回来刷新"),
             )
         )
 
     entry = cloud.entries.get(str(appid))
     root = cloud_root_of(entry, env.game_dir)
     if root is not None:
-        env.cloud_root, env.cloud_root_source = root, "按云同步规则"
+        env.cloud_root, env.cloud_root_source = root, i18n.t("按云同步规则")
     else:
         # 规则行缺失 (日志轮转 / 这台机器从没跑过自动云) —— 用落点反推
         env.cloud_root, env.cloud_root_source = ac_root_from_save_path(env.save_path)
     if env.cloud_root is not None:
         env.checks.append(
             Check(
-                "云同步范围",
+                i18n.t("云同步范围"),
                 OK,
                 f"{_short(env.cloud_root)}  ({env.cloud_root_source})",
             )
@@ -328,39 +329,39 @@ def inspect(appid: str = DEFAULT_APPID, *, steam_root: Path | str | None = None)
     if env.save_path and env.save_exists:
         detail = f"{fmt_size(env.save_size)}"
         if env.remote_remotetime:
-            detail += f" · 云端有一份 {fmt_size(env.remote_size)}"
-        env.checks.append(Check("本地存档", OK, detail))
+            detail += i18n.t(' · 云端有一份 {0}').format(fmt_size(env.remote_size))
+        env.checks.append(Check(i18n.t("本地存档"), OK, detail))
     elif env.save_path:
         env.checks.append(
-            Check("本地存档", WARN, "磁盘上没有这个文件", "启动一次游戏就会生成")
+            Check(i18n.t("本地存档"), WARN, i18n.t("磁盘上没有这个文件"), i18n.t("启动一次游戏就会生成"))
         )
 
     if env.game_installed:
         env.checks.append(
-            Check("游戏本体", OK, f"{env.game_name or appid}  ·  {_short(env.game_dir)}")
+            Check(i18n.t("游戏本体"), OK, f"{env.game_name or appid}  ·  {_short(env.game_dir)}")
         )
     else:
         env.checks.append(
-            Check("游戏本体", WARN, f"没找到 appid {appid} 的安装清单", "确认游戏装在这台机器上")
+            Check(i18n.t("游戏本体"), WARN, i18n.t('没找到 appid {0} 的安装清单').format(appid), i18n.t("确认游戏装在这台机器上"))
         )
 
     env.steam_running = _safe(steam_running)
     env.checks.append(
         Check(
-            "Steam 客户端",
+            i18n.t("Steam 客户端"),
             OK if env.steam_running else WARN,
-            "正在运行" if env.steam_running else "没在运行",
-            "" if env.steam_running else "点亮云通道需要 Steam 开着, 我可以帮你启动",
+            i18n.t("正在运行") if env.steam_running else i18n.t("没在运行"),
+            "" if env.steam_running else i18n.t("点亮云通道需要 Steam 开着, 我可以帮你启动"),
         )
     )
 
     env.game_running = _game_running()
     env.checks.append(
         Check(
-            "游戏",
+            i18n.t("游戏"),
             WARN if env.game_running else OK,
-            "正在运行" if env.game_running else "没在运行",
-            "先退出游戏再点亮通道" if env.game_running else "",
+            i18n.t("正在运行") if env.game_running else i18n.t("没在运行"),
+            i18n.t("先退出游戏再点亮通道") if env.game_running else "",
         )
     )
 
@@ -378,14 +379,14 @@ def inspect(appid: str = DEFAULT_APPID, *, steam_root: Path | str | None = None)
         env.channel_reason = channel.reason or ""
         env.channel_hint = channel.hint or ""
         if channel.lit is True:
-            env.checks.append(Check("本次云通道", OK, "已经点亮 (本次开 Steam 之后)"))
+            env.checks.append(Check(i18n.t("本次云通道"), OK, i18n.t("已经点亮 (本次开 Steam 之后)")))
         elif channel.lit is False:
             env.checks.append(
-                Check("本次云通道", WARN, "还没点亮", "进入第三步, 敲一行就亮了")
+                Check(i18n.t("本次云通道"), WARN, i18n.t("还没点亮"), i18n.t("进入第三步, 敲一行就亮了"))
             )
         else:
             env.checks.append(
-                Check("本次云通道", INFO, "暂时判断不了", "按第三步走一遍即可")
+                Check(i18n.t("本次云通道"), INFO, i18n.t("暂时判断不了"), i18n.t("按第三步走一遍即可"))
             )
 
     return env
@@ -451,7 +452,7 @@ def backup_saves(env: Environment, dest_root: Path | None = None) -> BackupResul
     """
     res = BackupResult()
     if env.cloud_root is None or not env.cloud_root.is_dir():
-        res.error = "还没定位到存档目录, 无法备份"
+        res.error = i18n.t("还没定位到存档目录, 无法备份")
         return res
 
     src: Path = env.cloud_root
@@ -465,7 +466,7 @@ def backup_saves(env: Environment, dest_root: Path | None = None) -> BackupResul
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(src, dest, copy_function=shutil.copy2)
     except OSError as exc:
-        res.error = f"复制失败: {exc}"
+        res.error = i18n.t('复制失败: {0}').format(exc)
         return res
 
     for p in sorted(src.rglob("*")):
@@ -476,10 +477,10 @@ def backup_saves(env: Environment, dest_root: Path | None = None) -> BackupResul
         try:
             h_src, h_dst = _sha256(p), _sha256(d)
         except OSError as exc:
-            res.error = f"校验读取失败: {rel}: {exc}"
+            res.error = i18n.t('校验读取失败: {0}: {1}').format(rel, exc)
             return res
         if h_src != h_dst or p.stat().st_size != d.stat().st_size:
-            res.error = f"校验不一致: {rel}"
+            res.error = i18n.t('校验不一致: {0}').format(rel)
             return res
         res.files.append(BackupFile(rel=rel, size=p.stat().st_size, sha256=h_src))
 
@@ -496,30 +497,30 @@ def backup_saves(env: Environment, dest_root: Path | None = None) -> BackupResul
 
 def _backup_info(env: Environment, dest: Path, res: BackupResult) -> str:
     lines = [
-        "SteamCloudBridge 存档备份",
+        i18n.t("SteamCloudBridge 存档备份"),
         "=" * 58,
         "",
-        f"备份时间  {res.created}",
-        f"备份目录  {dest}",
-        f"来源目录  {env.cloud_root}",
-        f"游戏账号  {env.accountid if env.accountid is not None else '(未知)'}",
+        i18n.t('备份时间  {0}').format(res.created),
+        i18n.t('备份目录  {0}').format(dest),
+        i18n.t('来源目录  {0}').format(env.cloud_root),
+        i18n.t('游戏账号  {0}').format(env.accountid if env.accountid is not None else i18n.t('(未知)')),
         "",
-        "内容与校验 (sha256)",
+        i18n.t("内容与校验 (sha256)"),
         "-" * 58,
     ]
     for f in res.files:
-        lines += [f"{f.rel}", f"    {f.size} 字节", f"    {f.sha256}"]
+        lines += [f"{f.rel}", i18n.t('    {0} 字节').format(f.size), f"    {f.sha256}"]
     lines += [
         "",
-        "怎么恢复 (万一存档出问题)",
+        i18n.t("怎么恢复 (万一存档出问题)"),
         "-" * 58,
-        "前提: 先彻底退出游戏, 并退出 Steam (右下角托盘也要退干净),",
-        "      否则刚放回去的存档会被云端旧档覆盖。",
+        i18n.t("前提: 先彻底退出游戏, 并退出 Steam (右下角托盘也要退干净),"),
+        i18n.t("      否则刚放回去的存档会被云端旧档覆盖。"),
         "",
-        f"  1. 打开 {env.cloud_root}",
-        "  2. 把里面的存档文件夹改名留底 (例如加上 .old)",
-        f"  3. 从本备份里把内容整个复制回去",
-        "  4. 重新启动 Steam 和游戏",
+        i18n.t('  1. 打开 {0}').format(env.cloud_root),
+        i18n.t("  2. 把里面的存档文件夹改名留底 (例如加上 .old)"),
+        i18n.t('  3. 从本备份里把内容整个复制回去'),
+        i18n.t("  4. 重新启动 Steam 和游戏"),
         "",
     ]
     return "\n".join(lines)
@@ -586,7 +587,7 @@ def watch_enable(
 
     while time.time() < deadline:
         if should_stop is not None and should_stop():
-            out.reason = "已取消"
+            out.reason = i18n.t("已取消")
             return out
         time.sleep(max(0.5, float(poll)))
         fresh = crossmachine.read_tail_lines(cl)[wm:]
@@ -597,13 +598,13 @@ def watch_enable(
         if hit is not None and getattr(hit, "found", False):
             out.ok = True
             out.ack_line = getattr(hit, "last_line", "") or ""
-            out.reason = "收到点亮回执"
+            out.reason = i18n.t("收到点亮回执")
             out.waited = time.time() - start
             return out
         if on_tick is not None:
             on_tick(time.time() - start)
 
-    out.reason = "等待超时, 没看到回执"
+    out.reason = i18n.t("等待超时, 没看到回执")
     out.waited = time.time() - start
     return out
 
@@ -634,9 +635,9 @@ def launch_game(appid: str = DEFAULT_APPID) -> tuple[bool, str]:
             p.parent.mkdir(parents=True, exist_ok=True)
             with open(p, "a", encoding="utf-8", newline="\n") as fh:
                 fh.write(uri + "\n")
-            return True, f"(测试钩子) 已记录 {uri}"
+            return True, i18n.t('(测试钩子) 已记录 {0}').format(uri)
         except OSError as exc:
-            return False, f"测试钩子写入失败: {exc}"
+            return False, i18n.t('测试钩子写入失败: {0}').format(exc)
     try:
         os.startfile(uri)  # noqa: S606
         return True, uri

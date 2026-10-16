@@ -13,11 +13,16 @@
 
 | 方式 | 怎么拿 | 解压后怎么做 |
 |---|---|---|
-| **① 仓库直接下载** | 本页右上角绿色 **`Code`** → **`Download ZIP`** | 进 `release/SteamCloudBridge-v1.2.0/`，双击 **`RUN-GUI.bat`** |
-| **② Release 附件** | 右栏 **`Releases`** → `v1.2.0` → 下载 `SteamCloudBridge-v1.2.0.zip` | 解压后同样双击 **`RUN-GUI.bat`** |
+| **① 仓库直接下载** | 本页右上角绿色 **`Code`** → **`Download ZIP`** | 进 `release/SteamCloudBridge-v1.3.0/`，双击 **`RUN-GUI.bat`** |
+| **② Release 附件** | 右栏 **`Releases`** → `v1.3.0` → 下载 `SteamCloudBridge-v1.3.0.zip` | 解压后同样双击 **`RUN-GUI.bat`** |
 
 两种拿到的是**同一个程序**。双击后打开一个窗口，**左边五步，跟着点就行，不用记任何命令**
 （本页下面的命令行用法属进阶内容，可先跳过）。
+
+> **中英文界面（v1.3.0）**：向导按**系统语言**自动选（中文系统中文，其余一律英文），
+> 右上角 **中文 / English** 可随时切换，选过就记住。强制指定：`SteamCloudBridgeGUI.exe --lang en`。
+> 命令行版**始终中文**，不受该设置影响。面客文档也分两份：`support\README.md`（中文）与
+> `support\README.en.md`（English）。
 
 > 程序已把 Python 运行时打包进去（PyInstaller），**无需安装 Python**。仅支持 Windows。
 > 仓库里同时保留了完整源码（`src/`、`tools/`、`tests/`）供运行/审计。
@@ -496,6 +501,7 @@ B 型 · Auto-Cloud (UFS)      Steam 按声明同步游戏自己的目录, userd
 | | └ 跨机链路验证 | 用朋友回传的**脱敏档**在开发者侧跑 `gen_adapter.py` ⇒ **56 个适配器**全部生成。首次用真正的第三方脱敏档验证"脱敏后信息保真度足够" |
 | **v0.2.2** | **第七轮发行包：exe 首验 + 报告头自洽**（`release/SteamCloudBridge-v0.2.2.zip`） | ✅ 已产出（16 文件 / **17.03 MB**）：单测 316 → **319** |
 | **v0.2.3** | **第八轮发行包："报告里没有" ≠ "机器上没有"**（`release/SteamCloudBridge-v0.2.3.zip`） | ✅ 已产出（16 文件 / **17.03 MB**）：新增 `steam.app_manifest_appids` 已安装全量清单 + `installed_not_probed_*` 覆盖率字段 + 报告防误读提示；单测 319 → **324** |
+| **v1.3.0** | **中英文双语界面（面向海外）** | ✅ 已产出：① 新增 `src/i18n.py` —— **中文原文即 key**（gettext 的 `msgid` 思路），中文模式 `t()` 原样返回 ⇒ 命令行输出与既有 472 条单测**一个字节都不变**；② 界面文案 **170 处** + f-string **74 处** 全部走 `i18n.t()`，英文表 **251** 条；③ 向导右上角 **中文 / English** 切换，**原地重建窗口**（保留体检结果与当前页）；语言存 `%APPDATA%\SteamCloudBridge\settings.json`，也可 `--lang en` 强制；④ 首次打开按**系统语言**自动选（中文系统中文，其余一律英文）；⑤ 面客文档分两份（`README.md` 中文 / `README.en.md` 英文），`VERSION.txt` 附英文速查卡；⑥ 新增 `tests/test_i18n.py`（37 条）：AST 全量扫描保证 **`t()` 的每个 key 都有英文、且表里没有死条目**、中文**不许当逻辑用**、**只有图形入口能改语言**（命令行必须永远中文）、模块级常量不许在 import 时翻译（踩过 `FAQ` 是 `AnnAssign` 的坑）、子进程真建窗抓全部控件文字确认无残留中文 |
 | **v1.2.0** | **魂二（`335300`）：它没有云, 改用"文件夹传输层"**（`release/SteamCloudBridge-v1.2.0.zip`） | ✅ 已产出：① 用 **4 条独立本机证据 + 外部核对**确认魂二**不支持 Steam 云**（属性而非配置 ⇒ 写进 `GameProfile.steam_cloud=False`）；② 新增 `src/transport/ds2.py` + CLI `save-status` / `save-out` / `save-in` + 图形向导**第 5 页**；③ 包格式 `scb-savepack/1`（`savepack.json` 逐文件 sha256 + `files/` + `先读我.txt`）；④ 导入**五道闸**：包校验 → 账号核对 → 游戏进程检查 → **强制备份**（失败即中止）→ 临时文件 + `os.replace` + 写后复校；⑤ `locate()` **永远只读**（`create=True` 也只**推导目录名不落盘**, `mkdir` 留给导入那一步）；⑥ 端到端 **8 步**全绿（含跨账号 `rc=2` / 改包 `rc=2` / 游戏在跑 `rc=3`），证据 `cases/ds2-folder-transport-2026-10-14/`；单测 **472** |
 | | └ 顺带修掉的一处"看着对其实不对" | `locate()` 原本在"磁盘上恰好一个账号目录"时**仍去读注册表**取本机账号 —— 白读一次，还在证据里留一行"取本机当前账号"，让人误判成**磁盘证据不足**。已改为只在候选 ≠ 1 时才回退（回归锁：该分支下 `get_active_account_id` 被调用即失败）；另新增一条提示：**调用方显式 `--account` 与磁盘唯一候选冲突时按磁盘走、但必须说出来**，否则用户以为是自己指定的账号生效了 |
 | | └ 两个真实世界的坑 | ① `.co2`（Seamless Coop mod 存档）**默认一起导出** —— 实测本机 `.co2` 比 `.sl2` 新，最新进度常在它里面；② `.co2` **不进任何云**，别指望它自己回来 |
@@ -562,6 +568,7 @@ SteamCloudBridge/
 │  ├─ vdf.py                   KeyValues/VDF 只读解析器 (含 Windows 路径转义处理)
 │  ├─ console.py               控制台编码加固 (只改 errors 不改 encoding; 探测器/搬运器共用)
 │  ├─ version.py               **版本号唯一来源** (--version / 发行包名 / VERSION.txt 都读它)
+│  ├─ i18n.py                  **[v1.3.0] 多语言层** (中文原文即 key; 英文表 251 条; 界面层专用, 命令行恒中文)
 │  ├─ steam/
 │  │  ├─ discovery.py          注册表 + libraryfolders + appmanifest + ac 根语义
 │  │  ├─ accounts.py           账号发现 + SteamID/accountid/hex 换算
@@ -635,6 +642,7 @@ SteamCloudBridge/
 │  ├─ test_crossmachine.py     **[M6] 跨机往返判定 (pass / byte-mismatch / nothing-to-do / pending)**
 │  ├─ test_gui_service.py      **[v1.1.0] 图形向导**后端层**单测 (含"不许 import tkinter" + 魂二包装层)**
 │  ├─ test_ds2.py              **[v1.2.0] 魂二文件夹传输层单测 (落点 / 导出 / 校验 / 导入五道闸)**
+│  ├─ test_i18n.py             **[v1.3.0] 多语言不变量 (AST 全量对齐 / 中文不许当逻辑 / 只有 GUI 能切语言 / 子进程英文建窗)**
 │  ├─ test_redaction.py        **脱敏回归锁** (真标识符不许出现在会随包发出的地方)
 │  └─ test_transport_e2e.py    **搬运器 CLI 端到端 (参数 → 落盘整条链路)**
 ├─ docs/

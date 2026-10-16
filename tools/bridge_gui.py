@@ -6,7 +6,12 @@
     python tools/bridge_gui.py                   同样效果 (仓库里)
     python tools/bridge_gui.py --smoke           只把界面建起来然后退出 (自检)
     python tools/bridge_gui.py --appid 374320    指定游戏
+    python tools/bridge_gui.py --lang en         指定界面语言 (zh / en)
     python tools/bridge_gui.py --version
+
+不传 `--lang` 时按"系统语言"自动选: 中文系统给中文, 其它一律给英文 (面向海外的
+默认). 用户在界面上点选的语言会存进 `%APPDATA%\\SteamCloudBridge\\settings.json`,
+下次打开还记得.
 
 **为什么另开一个入口而不是给 `bridge.py` 加 `--gui`**: 那个是 CLI, 打包时保留
 控制台窗口; 向导要的是 windowed (没有黑框). 两个 exe 各管一头, 共享同一套 `src/*`,
@@ -24,6 +29,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from src.console import harden_console  # noqa: E402
+from src.i18n import LANGS  # noqa: E402
 from src.version import VERSION  # noqa: E402
 
 
@@ -47,6 +53,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--appid", default=None, help="目标游戏 appid (默认 374320)")
     ap.add_argument("--page", default=None, type=int, help="直接打开第几步 (1-5)")
+    ap.add_argument(
+        "--lang",
+        default=None,
+        choices=list(LANGS),
+        help="界面语言 (zh / en); 不传就按系统语言自动选",
+    )
     ap.add_argument("--smoke", action="store_true", help="建好窗口后立刻退出 (打包自检用)")
     ap.add_argument("--version", action="store_true", help="打印版本号")
     args = ap.parse_args(argv)
@@ -82,6 +94,8 @@ def main(argv: list[str] | None = None) -> int:
         passthrough += ["--appid", str(args.appid)]
     if args.page is not None:
         passthrough += ["--page", str(max(1, args.page) - 1)]
+    if args.lang:
+        passthrough += ["--lang", args.lang]
     if args.smoke:
         passthrough.append("--smoke")
     return run_gui(passthrough)

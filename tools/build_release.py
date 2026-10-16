@@ -24,7 +24,8 @@
     support/SteamCloudBridgeProbe.exe    可选: PyInstaller 产物 (免装 Python)
     support/SteamCloudBridgeBridge.exe   可选: 同上
     support/cloud_bait_check.py          诱饵法的实现 (需要 Python 3)
-    support/README.md            **唯一一份说明** (原先 8 篇 01~08 合并于此)
+    support/README.md            中文说明 (原先 8 篇 01~08 合并于此)
+    support/README.en.md         英文说明 (v1.3.0, 与中文版结构一一对应)
     support/LICENSE
     support/VERSION.txt
 
@@ -32,8 +33,9 @@
       (它们一律用 `%~dp0` 找同目录的 exe/README), 所以把它们整体挪进
       `support/` 后**内部一行都不用改** —— 改的只有顶层那个 `RUN-GUI.bat`.
 
-文档纪律: 面客说明**只保留一份 README.md**. 8 篇编号文档的后果是
-朋友在包里看到 8 个 .md 不知道该开哪个 —— 合并后所有操作都在这一个文件里.
+文档纪律: 面客说明**只保留两份** (`README.md` 中文 / `README.en.md` 英文),
+一一对应、各自独立成篇. 8 篇编号文档的后果是朋友在包里看到 8 个 .md 不知道该开
+哪个; 而"中英混排一份"对两种读者都更差 —— 读者只会看其中一份.
 
 两条硬约束 (都是踩过坑才写下的):
 
@@ -80,8 +82,11 @@ SINGLE_FILES = [
 
 # 8 篇编号文档 (01~08) 合并为**单一** README.md.
 # 理由: 朋友拿到包后要自己判断"先开哪一份"本身就是成本; 合并后开哪个没有歧义.
+# v1.3.0: 面向海外加一份英文版. 两份**结构一一对应**, 各自语言独立成篇 ——
+# 不做"中英混排", 因为读者只会看其中一份.
 DOC_FILES = [
     "README.md",
+    "README.en.md",
 ]
 BAT_FILES = [
     # v1.1.0: **日常入口** —— 双击打开图形向导, 一步步引导. 包里所有其它 .bat
@@ -285,7 +290,33 @@ def build(exes: dict[str, Path | None], do_zip: bool) -> Path:
                 "",
                 "边界: 只搬同账号自己存档的字节; 不解析存档内容; 不改 Steam 安装目录。",
                 "",
-                f"全部说明: {SUPPORT_DIR}\\README.md (包里唯一一份文档)。",
+                f"全部说明: {SUPPORT_DIR}\\README.md (中文) / {SUPPORT_DIR}\\README.en.md (English)。",
+                "",
+                "------------------------------------------------------------",
+                "",
+                f"SteamCloudBridge {RELEASE_VERSION} — English quick card",
+                "",
+                "How this folder is laid out:",
+                "",
+                "  RUN-GUI.bat                   <== double-click this one",
+                "  SteamCloudBridgeGUI.exe            the wizard (sits next to the launcher)",
+                f"  {SUPPORT_DIR}\\                         everything else lives in here",
+                "",
+                "The wizard has five steps: 1 Check setup  2 Back up saves  3 Before each",
+                "session  4 Troubleshooting  5 DS2 saves. It only writes to disk when you",
+                "click Back up or Import.",
+                "",
+                "Step 5, in one line: Dark Souls II has no Steam Cloud (the game itself",
+                "lacks the feature, there is no switch to flip), so it exports your saves",
+                "into a folder you carry on a cloud drive or USB stick and imports them",
+                "on the other machine. Bytes only; save contents are never read or edited.",
+                "",
+                f"Full documentation: {SUPPORT_DIR}\\README.en.md (English) / "
+                f"{SUPPORT_DIR}\\README.md (Chinese).",
+                "",
+                "The UI language follows your system on first launch, and the Chinese /",
+                "English switch in the wizard's top-right corner changes it any time.",
+                "The command-line tools stay Chinese.",
                 "",
             ]
         ),

@@ -16,6 +16,7 @@
 """
 
 from __future__ import annotations
+from .. import i18n
 
 import queue
 import threading
@@ -48,7 +49,7 @@ class App(tk.Tk):
     def __init__(self, *, appid: str | None = None, smoke: bool = False) -> None:
         super().__init__()
         self.withdraw()  # 先把窗口藏起来, 等布局算完再显示 —— 避免开局闪一下白框
-        self.title("SteamCloudBridge · 黑魂存档同步")
+        self.title(i18n.t("SteamCloudBridge · 黑魂存档同步"))
         self.configure(bg=C["bg"])
         theme.init(self)
 
@@ -72,6 +73,7 @@ class App(tk.Tk):
         self._build_footer()
         self._build_body()
         self._install_steps()
+        self._pages: list[Page] = self._make_pages()
         self.go(0)
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -96,7 +98,7 @@ class App(tk.Tk):
             bg=C["surface"], fg=C["text"],
         ).pack(side="left", pady=16)
         tk.Label(
-            inner, text=f"黑魂存档同步助手   v{VERSION}",
+            inner, text=i18n.t('黑魂存档同步助手   v{0}').format(VERSION),
             font=theme.fonts().small, bg=C["surface"], fg=C["text_faint"],
         ).pack(side="left", padx=(12, 0), pady=16)
 
@@ -105,7 +107,13 @@ class App(tk.Tk):
             bg=C["neutral_soft"], fg=C["neutral"], padx=10, pady=4,
         )
         self.badge.pack(side="right", pady=16)
-        self._set_badge("未检查", "neutral")
+        self._set_badge(i18n.t("未检查"), "neutral")
+
+        # 语言选择器放在徽标左边 (`side="right"` 后 pack 的在更左边).
+        # 它必须在**顶栏**, 而不是塞进某一页 —— 找不到自己母语的人不会去翻第 4 步.
+        widgets.lang_switch(
+            inner, i18n.current(), self.set_language,
+        ).pack(side="right", pady=16, padx=(0, 14))
 
         widgets.hline(self).pack(side="top", fill="x")
 
@@ -145,7 +153,7 @@ class App(tk.Tk):
         inner = tk.Frame(foot, bg=C["surface"])
         inner.pack(fill="both", expand=True, padx=22, pady=11)
 
-        self.btn_prev = widgets.ghost_button(inner, "上一步", lambda: self.go(self.page - 1))
+        self.btn_prev = widgets.ghost_button(inner, i18n.t("上一步"), lambda: self.go(self.page - 1))
         self.btn_prev.pack(side="left")
 
         self.hint = tk.Label(
@@ -153,14 +161,14 @@ class App(tk.Tk):
         )
         self.hint.pack(side="left", padx=16)
 
-        self.btn_next = widgets.primary_button(inner, "下一步", lambda: self.go(self.page + 1))
+        self.btn_next = widgets.primary_button(inner, i18n.t("下一步"), lambda: self.go(self.page + 1))
         self.btn_next.pack(side="right")
 
     def _install_steps(self) -> None:
         self.step_items: list[widgets.StepItem] = []
         for i, (title, _sub) in enumerate(STEPS):
             item = widgets.StepItem(
-                self.steps_host, i + 1, title, (lambda k=i: self.go(k)),
+                self.steps_host, i + 1, i18n.t(title), (lambda k=i: self.go(k)),
                 bg=C["sidebar"],
             )
             item.pack(fill="x")
@@ -189,7 +197,7 @@ class App(tk.Tk):
         last = index == len(pages) - 1
         self.btn_next.configure(
             state="disabled" if last else "normal",
-            text="完成" if last else "下一步",
+            text=i18n.t("完成") if last else i18n.t("下一步"),
         )
         pages[index].on_show()
 
@@ -228,10 +236,78 @@ class App(tk.Tk):
         self._cancel.set()
         self.destroy()
 
+    # ------------------------------------------------------------ 语言
+
+    def _make_pages(self) -> list[Page]:
+        """五个页面, 顺序即左侧步骤条的顺序.
+
+        抽成方法是因为**换语言要重建**: 文案是在"建控件时"取值的, tk 的控件文字
+        不会自己跟着语言变. 重建时页对象也一并重来, 这条路径必须和生产路径同源,
+        所以两边都走这里.
+        """
+        return [
+            HomePage(self.content, self),
+            BackupPage(self.content, self),
+            PlayPage(self.content, self),
+            HelpPage(self.content, self),
+            Ds2Page(self.content, self),
+        ]
+
+    def set_language(self, code: str) -> None:
+        """切换界面语言并**记住**; 界面原地重建."""
+        if code == i18n.current():
+            return
+        if self._busy:
+            # 后台正在干活 (备份 / 导入 / 等控制台回执), 那些回调绑在**即将被销毁**
+            # 的控件上. 与其做一套"回调代数"去兜, 不如直接说清楚等一会儿 ——
+            # 用户按一下语言按钮, 得到"稍等"比得到一堆幽灵异常好.
+            self._pages[self.page].banner.show(
+                "warn", i18n.t("正在忙，等这一步做完再切语言。")
+            )
+            return
+        i18n.set_lang(code)
+        i18n.save_lang(code)  # 尽力而为: 写不进去也不影响本次
+        self._rebuild()
+
+    def _rebuild(self) -> None:
+        """按当前语言把整个窗口重建一遍.
+
+        保留 `env` (体检结果) 与当前页 —— 换个语言不该让用户再等一次体检, 也不该
+        被踢回第一步.
+        """
+        page, env = self.page, self.env
+        for w in self.winfo_children():
+            w.destroy()
+        self._build_chrome()
+        self._build_footer()
+        self._build_body()
+        self._install_steps()
+        self._pages = self._make_pages()
+        for p in self._pages:
+            p.env = env
+        self._page = -1  # 让 go() 认不出"已经在当前页", 强制它真的重画
+        self.go(page)
+        if env is not None:
+            self._apply_env(env)
+
+    def report_callback_exception(self, exc: type[BaseException], val: BaseException, tb: Any) -> None:
+        """吞掉"控件已经没了"这一类 `after` 回调异常.
+
+        换语言会销毁并重建控件, 而在那之前排队的 `after` 回调 (复制按钮 1.4 秒后把
+        文字改回来那种) 醒来时会发现自己的控件不见了. 这属于我们自己制造的良性竞态,
+        不该弹给用户; 其它异常照旧走默认处理, 别把真 bug 一起吃了.
+        """
+        text = str(val)
+        if isinstance(val, tk.TclError) and (
+            "bad window path name" in text or "invalid command name" in text
+        ):
+            return
+        super().report_callback_exception(exc, val, tb)
+
     # ------------------------------------------------------------ 体检
 
     def refresh_env(self, on_done: Callable[[], None] | None = None) -> None:
-        self._set_badge("检查中…", "neutral")
+        self._set_badge(i18n.t("检查中…"), "neutral")
         home = self._pages[0]
         home.set_loading(True)
 
@@ -241,8 +317,8 @@ class App(tk.Tk):
         def done(result: Any, exc: Exception | None) -> None:
             home.set_loading(False)
             if exc is not None:
-                self._set_badge("检查失败", "bad")
-                home.banner.show("bad", f"检查失败: {exc}")
+                self._set_badge(i18n.t("检查失败"), "bad")
+                home.banner.show("bad", i18n.t('检查失败: {0}').format(exc))
                 return
             env: service.Environment = result
             self.env = env
@@ -261,16 +337,16 @@ class App(tk.Tk):
 
     def _apply_env(self, env: service.Environment) -> None:
         if env.error:
-            self._set_badge("无法检查", "bad")
+            self._set_badge(i18n.t("无法检查"), "bad")
             return
         if env.channel_lit is True:
-            self._set_badge("云通道已点亮", "ok")
+            self._set_badge(i18n.t("云通道已点亮"), "ok")
         elif env.game_running:
-            self._set_badge("游戏正在运行", "warn")
+            self._set_badge(i18n.t("游戏正在运行"), "warn")
         elif env.channel_lit is False:
-            self._set_badge("云通道未点亮", "warn")
+            self._set_badge(i18n.t("云通道未点亮"), "warn")
         else:
-            self._set_badge("已检查", "neutral")
+            self._set_badge(i18n.t("已检查"), "neutral")
 
 
 # ---------------------------------------------------------------- 页面基类
@@ -285,12 +361,14 @@ class Page(tk.Frame):
 
         head = tk.Frame(self, bg=C["bg"])
         head.pack(fill="x", padx=30, pady=(26, 0))
+        # STEPS 是**模块级常量** (import 期求值), 不能在里面包 i18n.t() ——
+        # 那样语言会被 import 定死, 切语言时标题不跟着变. 所以在这里现场翻译.
         tk.Label(
-            head, text=STEPS[index][0], font=theme.fonts().title,
+            head, text=i18n.t(STEPS[index][0]), font=theme.fonts().title,
             bg=C["bg"], fg=C["text"], anchor="w",
         ).pack(anchor="w")
         tk.Label(
-            head, text=STEPS[index][1], font=theme.fonts().subtitle,
+            head, text=i18n.t(STEPS[index][1]), font=theme.fonts().subtitle,
             bg=C["bg"], fg=C["text_dim"], anchor="w",
         ).pack(anchor="w", pady=(4, 0))
 
@@ -317,18 +395,18 @@ class HomePage(Page):
         top = tk.Frame(self.body, bg=C["bg"])
         top.pack(fill="x")
         self.status_label = tk.Label(
-            top, text="正在检查…", font=theme.fonts().small,
+            top, text=i18n.t("正在检查…"), font=theme.fonts().small,
             bg=C["bg"], fg=C["text_dim"],
         )
         self.status_label.pack(side="left")
-        widgets.ghost_button(top, "重新检查", self.app.refresh_env, small=True).pack(side="right")
+        widgets.ghost_button(top, i18n.t("重新检查"), self.app.refresh_env, small=True).pack(side="right")
 
         card = widgets.Card(self.body, padding=20)
         card.pack(fill="both", expand=True, pady=(12, 0))
 
-        widgets.section_title(card.body, "本机状况").pack(anchor="w")
+        widgets.section_title(card.body, i18n.t("本机状况")).pack(anchor="w")
         widgets.paragraph(
-            card.body, "这一步只看不改，不会动任何文件。", bg=C["surface"],
+            card.body, i18n.t("这一步只看不改，不会动任何文件。"), bg=C["surface"],
         ).pack(anchor="w", pady=(3, 14))
         widgets.hline(card.body).pack(fill="x", pady=(0, 12))
 
@@ -346,7 +424,7 @@ class HomePage(Page):
         self.notes_label.pack(anchor="w")
 
     def set_loading(self, busy: bool) -> None:
-        self.status_label.configure(text="正在检查…" if busy else "检查完成")
+        self.status_label.configure(text=i18n.t("正在检查…") if busy else i18n.t("检查完成"))
 
     def render(self, env: service.Environment) -> None:
         self.banner.hide()
@@ -360,11 +438,11 @@ class HomePage(Page):
 
         summary = []
         if env.save_path:
-            summary.append(f"存档: {service.fmt_size(env.save_size)}")
+            summary.append(i18n.t('存档: {0}').format(service.fmt_size(env.save_size)))
         if env.cloud_change_number:
-            summary.append(f"云端版本号: {env.cloud_change_number}")
+            summary.append(i18n.t('云端版本号: {0}').format(env.cloud_change_number))
         if env.remote_remotetime:
-            summary.append("云端已有一份副本")
+            summary.append(i18n.t("云端已有一份副本"))
         self.notes_label.configure(text="  ·  ".join(summary) if summary else "")
 
         if env.error:
@@ -373,8 +451,8 @@ class HomePage(Page):
         if env.save_exists and env.channel_lit is False:
             self.banner.show(
                 "info",
-                "状态正常。云通道每次启动 Steam 都会关掉，所以下一步先备份，"
-                "再进入第三步点亮它。",
+                i18n.t("状态正常。云通道每次启动 Steam 都会关掉，所以下一步先备份，"
+                "再进入第三步点亮它。"),
             )
 
     def on_show(self) -> None:
@@ -392,11 +470,11 @@ class BackupPage(Page):
         card = widgets.Card(self.body, padding=20)
         card.pack(fill="x")
 
-        widgets.section_title(card.body, "备份存档").pack(anchor="w")
+        widgets.section_title(card.body, i18n.t("备份存档")).pack(anchor="w")
         widgets.paragraph(
             card.body,
-            "把整个存档目录（含所有角色进度与设置）完整复制一份到程序旁边。\n"
-            "只会复制，不会移动或删除任何东西。复制完会逐个文件核对校验值。",
+            i18n.t("把整个存档目录（含所有角色进度与设置）完整复制一份到程序旁边。\n"
+            "只会复制，不会移动或删除任何东西。复制完会逐个文件核对校验值。"),
             bg=C["surface"],
         ).pack(anchor="w", pady=(4, 6))
 
@@ -408,9 +486,9 @@ class BackupPage(Page):
 
         row = tk.Frame(card.body, bg=C["surface"])
         row.pack(fill="x")
-        self.btn_backup = widgets.primary_button(row, "立即备份", self.start_backup)
+        self.btn_backup = widgets.primary_button(row, i18n.t("立即备份"), self.start_backup)
         self.btn_backup.pack(side="left")
-        self.btn_open = widgets.ghost_button(row, "打开备份文件夹", self.open_folder)
+        self.btn_open = widgets.ghost_button(row, i18n.t("打开备份文件夹"), self.open_folder)
         self.btn_open.pack(side="left", padx=(10, 0))
         self.btn_open.configure(state="disabled")
 
@@ -421,17 +499,17 @@ class BackupPage(Page):
 
         hist = widgets.Card(self.body, padding=20)
         hist.pack(fill="both", expand=True, pady=(16, 0))
-        widgets.section_title(hist.body, "已有备份").pack(anchor="w")
+        widgets.section_title(hist.body, i18n.t("已有备份")).pack(anchor="w")
         self.hist_box = tk.Frame(hist.body, bg=C["surface"])
         self.hist_box.pack(fill="both", expand=True, pady=(12, 0))
 
     def on_show(self) -> None:
         env = self.env
         if env is not None and env.cloud_root:
-            self.where.configure(text=f"来源: {env.cloud_root}     ({env.cloud_root_source})")
+            self.where.configure(text=i18n.t('来源: {0}     ({1})').format(env.cloud_root, env.cloud_root_source))
             self.btn_backup.configure(state="normal")
         elif env is not None:
-            self.where.configure(text="还没定位到存档目录 —— 回到第一步点一次“重新检查”。")
+            self.where.configure(text=i18n.t("还没定位到存档目录 —— 回到第一步点一次“重新检查”。"))
             self.btn_backup.configure(state="disabled")
         self.render_history()
 
@@ -441,7 +519,7 @@ class BackupPage(Page):
         items = service.list_backups()
         if not items:
             tk.Label(
-                self.hist_box, text="还没有备份。", font=theme.fonts().small,
+                self.hist_box, text=i18n.t("还没有备份。"), font=theme.fonts().small,
                 bg=C["surface"], fg=C["text_faint"],
             ).pack(anchor="w")
             self.btn_open.configure(state="disabled")
@@ -459,7 +537,7 @@ class BackupPage(Page):
             ).pack(side="left")
             tk.Label(
                 line,
-                text=f"{b['count']} 个文件 · {service.fmt_size(b['bytes'])}",
+                text=i18n.t('{0} 个文件 · {1}').format(b['count'], service.fmt_size(b['bytes'])),
                 font=theme.fonts().small, bg=C["surface"], fg=C["text_dim"],
             ).pack(side="left", padx=(10, 0))
 
@@ -467,16 +545,16 @@ class BackupPage(Page):
         items = service.list_backups()
         target = items[0]["dir"].parent if items else service.default_backup_root()
         if not service.open_path(target):
-            self.banner.show("warn", f"打不开: {target}")
+            self.banner.show("warn", i18n.t('打不开: {0}').format(target))
 
     def start_backup(self) -> None:
         env = self.env
         if env is None or not env.can_backup:
-            self.banner.show("bad", "还没定位到存档目录，先回到第一步重新检查。")
+            self.banner.show("bad", i18n.t("还没定位到存档目录，先回到第一步重新检查。"))
             return
         self.banner.hide()
         self.btn_backup.configure(state="disabled")
-        self.progress.configure(text="正在复制并校验（约 27 MB，几秒钟）…")
+        self.progress.configure(text=i18n.t("正在复制并校验（约 27 MB，几秒钟）…"))
 
         def work() -> service.BackupResult:
             return service.backup_saves(env)
@@ -485,20 +563,19 @@ class BackupPage(Page):
             self.btn_backup.configure(state="normal")
             if exc is not None:
                 self.progress.configure(text="")
-                self.banner.show("bad", f"备份失败: {exc}")
+                self.banner.show("bad", i18n.t('备份失败: {0}').format(exc))
                 return
             res: service.BackupResult = result
             if not res.ok:
                 self.progress.configure(text="")
-                self.banner.show("bad", f"备份失败: {res.error}")
+                self.banner.show("bad", i18n.t('备份失败: {0}').format(res.error))
                 return
             self.progress.configure(
-                text=f"完成: {len(res.files)} 个文件，{service.fmt_size(res.total_bytes)}，"
-                f"已逐个核对校验值"
+                text=i18n.t('完成: {0} 个文件，{1}，已逐个核对校验值').format(len(res.files), service.fmt_size(res.total_bytes))
             )
             self.banner.show(
                 "ok",
-                f"备份成功，已核对无误。位置: {res.dest}",
+                i18n.t('备份成功，已核对无误。位置: {0}').format(res.dest),
             )
             self.btn_open.configure(state="normal")
             self.render_history()
@@ -517,24 +594,24 @@ class PlayPage(Page):
         card = widgets.Card(self.body, padding=20)
         card.pack(fill="both", expand=True)
 
-        widgets.section_title(card.body, "云通道每次都要重新点亮").pack(anchor="w")
+        widgets.section_title(card.body, i18n.t("云通道每次都要重新点亮")).pack(anchor="w")
         widgets.paragraph(
             card.body,
-            "Steam 的云开关分两层：账号那一层是持久的，游戏这一层只在本次开启 Steam 期间有效。\n"
-            "所以每次开始玩之前，按下面三步走一遍就行（半分钟）。",
+            i18n.t("Steam 的云开关分两层：账号那一层是持久的，游戏这一层只在本次开启 Steam 期间有效。\n"
+            "所以每次开始玩之前，按下面三步走一遍就行（半分钟）。"),
             bg=C["surface"],
         ).pack(anchor="w", pady=(4, 14))
 
         # --- 1 打开控制台
         step1 = tk.Frame(card.body, bg=C["surface"])
         step1.pack(fill="x", pady=(0, 12))
-        self._step_label(step1, "1", "打开 Steam 控制台").pack(side="left")
+        self._step_label(step1, "1", i18n.t("打开 Steam 控制台")).pack(side="left")
         self.btn_console = widgets.ghost_button(
-            step1, "打开 Steam 控制台", self.do_open_console, small=True,
+            step1, i18n.t("打开 Steam 控制台"), self.do_open_console, small=True,
         )
         self.btn_console.pack(side="right")
         self.btn_steam = widgets.ghost_button(
-            step1, "Steam 没开？启动它", self.do_start_steam, small=True,
+            step1, i18n.t("Steam 没开？启动它"), self.do_start_steam, small=True,
         )
         self.btn_steam.pack(side="right", padx=(0, 8))
         self.btn_steam.configure(state="disabled")  # 体检结论出来前不知道自己该不该亮
@@ -542,12 +619,12 @@ class PlayPage(Page):
         # --- 2 敲一行
         step2 = tk.Frame(card.body, bg=C["surface"])
         step2.pack(fill="x", pady=(0, 6))
-        self._step_label(step2, "2", "把这一行敲进控制台（或复制粘贴）").pack(anchor="w")
+        self._step_label(step2, "2", i18n.t("把这一行敲进控制台（或复制粘贴）")).pack(anchor="w")
         self.cmd = widgets.CommandBox(card.body, bg=C["surface"])
         self.cmd.pack(fill="x", pady=(8, 4))
         tk.Label(
             card.body,
-            text="敲对了不会有任何成功提示，这是正常的 —— 下面的状态灯会自己变绿。",
+            text=i18n.t("敲对了不会有任何成功提示，这是正常的 —— 下面的状态灯会自己变绿。"),
             font=theme.fonts().small, bg=C["surface"], fg=C["text_faint"],
             anchor="w", justify="left", wraplength=theme.px(700),
         ).pack(anchor="w", pady=(4, 14))
@@ -555,9 +632,9 @@ class PlayPage(Page):
         # --- 3 等确认
         step3 = tk.Frame(card.body, bg=C["surface"])
         step3.pack(fill="x")
-        self._step_label(step3, "3", "等确认").pack(side="left")
+        self._step_label(step3, "3", i18n.t("等确认")).pack(side="left")
         self.watch_state = tk.Label(
-            step3, text="● 未开始", font=theme.fonts().small_bold,
+            step3, text=i18n.t("● 未开始"), font=theme.fonts().small_bold,
             bg=C["surface"], fg=C["text_faint"],
         )
         self.watch_state.pack(side="right")
@@ -566,11 +643,11 @@ class PlayPage(Page):
 
         launch_row = tk.Frame(card.body, bg=C["surface"])
         launch_row.pack(fill="x")
-        self.btn_play = widgets.primary_button(launch_row, "启动游戏", self.do_launch)
+        self.btn_play = widgets.primary_button(launch_row, i18n.t("启动游戏"), self.do_launch)
         self.btn_play.pack(side="left")
         self.play_hint = tk.Label(
             launch_row,
-            text="玩完正常退出游戏就行，Steam 会把存档同步到云端。",
+            text=i18n.t("玩完正常退出游戏就行，Steam 会把存档同步到云端。"),
             font=theme.fonts().small, bg=C["surface"], fg=C["text_dim"],
         )
         self.play_hint.pack(side="left", padx=(14, 0))
@@ -596,20 +673,20 @@ class PlayPage(Page):
         self.btn_steam.configure(state="disabled" if env.steam_running else "normal")
 
         if env.channel_lit is True:
-            self._set_watch("ok", "✓ 已点亮")
-            self.banner.show("ok", "本次云通道已经是亮着的，可以直接启动游戏。")
+            self._set_watch("ok", i18n.t("✓ 已点亮"))
+            self.banner.show("ok", i18n.t("本次云通道已经是亮着的，可以直接启动游戏。"))
             return
         if env.game_running:
-            self.banner.show("warn", "游戏正在运行 —— 请先完全退出游戏，再点亮通道。")
+            self.banner.show("warn", i18n.t("游戏正在运行 —— 请先完全退出游戏，再点亮通道。"))
             return
         if env.steam_running is False:
-            self.banner.show("warn", "Steam 没在运行，先点上面的“启动它”，再回来敲这一行。")
+            self.banner.show("warn", i18n.t("Steam 没在运行，先点上面的“启动它”，再回来敲这一行。"))
             return
         # 监听**不在这里**自动挂上: 用户可能只是先看一眼这页, 挂上去就白等三分钟.
         # 等他点了"打开 Steam 控制台"再开始盯日志.
-        self._set_watch("idle", "● 未开始")
+        self._set_watch("idle", i18n.t("● 未开始"))
         self.banner.show(
-            "info", "点右上角的“打开 Steam 控制台”，然后把下面这一行敲进控制台。"
+            "info", i18n.t("点右上角的“打开 Steam 控制台”，然后把下面这一行敲进控制台。")
         )
 
     def _set_watch(self, kind: str, text: str) -> None:
@@ -622,31 +699,31 @@ class PlayPage(Page):
         if service.open_console():
             self.banner.show(
                 "info",
-                "控制台已打开。⚠ 光打开还不算 —— 先用鼠标点一下最底下那行输入框，"
-                "再把上面那一行敲进去（或按 Ctrl+V 粘贴）。",
+                i18n.t("控制台已打开。⚠ 光打开还不算 —— 先用鼠标点一下最底下那行输入框，"
+                "再把上面那一行敲进去（或按 Ctrl+V 粘贴）。"),
             )
             self.start_watch()
         else:
             self.banner.show(
                 "warn",
-                "没能自动打开控制台。可以手动：按 Win+R，输入 steam://open/console 回车。",
+                i18n.t("没能自动打开控制台。可以手动：按 Win+R，输入 steam://open/console 回车。"),
             )
 
     def do_start_steam(self) -> None:
         env = self.env
         if env is None or env.install is None:
-            self.banner.show("bad", "还没检查过环境，先回到第一步。")
+            self.banner.show("bad", i18n.t("还没检查过环境，先回到第一步。"))
             return
-        self.banner.show("info", "正在启动 Steam，请等它登录完成…")
+        self.banner.show("info", i18n.t("正在启动 Steam，请等它登录完成…"))
 
         def work() -> bool:
             return service.start_steam(env.install)
 
         def done(result: Any, exc: Exception | None) -> None:
             if exc is not None or not result:
-                self.banner.show("warn", "Steam 好像没起来，手动开一下再点“重新检查”。")
+                self.banner.show("warn", i18n.t("Steam 好像没起来，手动开一下再点“重新检查”。"))
                 return
-            self.banner.show("ok", "Steam 已启动。")
+            self.banner.show("ok", i18n.t("Steam 已启动。"))
             self.app.refresh_env()
 
         self.app.run_async(work, done)
@@ -654,17 +731,17 @@ class PlayPage(Page):
     def do_launch(self) -> None:
         env = self.env
         if env is not None and env.game_running:
-            self.banner.show("warn", "游戏已经在运行了。")
+            self.banner.show("warn", i18n.t("游戏已经在运行了。"))
             return
         ok, detail = service.launch_game(self.app.appid)
         if ok:
             self.banner.show(
                 "ok",
-                "已交给 Steam 启动游戏。玩完正常退出，存档会自动上传到云端。",
+                i18n.t("已交给 Steam 启动游戏。玩完正常退出，存档会自动上传到云端。"),
             )
-            self.play_hint.configure(text="本会话通道已点亮，中途别重启 Steam。")
+            self.play_hint.configure(text=i18n.t("本会话通道已点亮，中途别重启 Steam。"))
         else:
-            self.banner.show("bad", f"启动失败: {detail}")
+            self.banner.show("bad", i18n.t('启动失败: {0}').format(detail))
 
     def start_watch(self) -> None:
         """开始盯控制台日志, 等用户敲进去的回执. 幂等 —— 重复调用不会叠加线程."""
@@ -672,8 +749,8 @@ class PlayPage(Page):
         if env is None or env.install is None or self._watching:
             return
         self._watching = True
-        self._set_watch("warn", "● 正在等待你敲入…")
-        self.app.set_hint("等待控制台回执中（最多 3 分钟）")
+        self._set_watch("warn", i18n.t("● 正在等待你敲入…"))
+        self.app.set_hint(i18n.t("等待控制台回执中（最多 3 分钟）"))
 
         def work() -> service.EnableOutcome:
             return service.watch_enable(
@@ -688,20 +765,20 @@ class PlayPage(Page):
             self._watching = False
             self.app.set_hint("")
             if exc is not None:
-                self._set_watch("idle", "● 监听中断")
+                self._set_watch("idle", i18n.t("● 监听中断"))
                 return
             out: service.EnableOutcome = result
             if out.ok:
-                self._set_watch("ok", "✓ 已点亮")
-                self.banner.show("ok", "云通道已点亮。现在可以启动游戏了。")
-                self.app._set_badge("云通道已点亮", "ok")
+                self._set_watch("ok", i18n.t("✓ 已点亮"))
+                self.banner.show("ok", i18n.t("云通道已点亮。现在可以启动游戏了。"))
+                self.app._set_badge(i18n.t("云通道已点亮"), "ok")
             else:
-                self._set_watch("idle", "● 没等到回执")
+                self._set_watch("idle", i18n.t("● 没等到回执"))
                 self.banner.show(
                     "warn",
-                    "没等到控制台回执。可能是没敲进去，或敲到了别的地方。"
+                    i18n.t("没等到控制台回执。可能是没敲进去，或敲到了别的地方。"
                     "点一次“打开 Steam 控制台”，用鼠标点一下输入行后重新敲；"
-                    "也可以直接启动游戏，通道通常已经生效。",
+                    "也可以直接启动游戏，通道通常已经生效。"),
                 )
 
         self.app.run_async(work, done)
@@ -743,6 +820,13 @@ FAQ: tuple[tuple[str, str], ...] = (
         "本工具能做的是“文件夹搬”：导出 → 放进网盘或 U 盘 → 另一台机器导入，"
         "效果上一样是跨机接着玩，只是要你自己点两下。",
     ),
+    (
+        "界面怎么换成英文",
+        "点右上角的“中文 / English”就换了，选过就记住（写在 "
+        "%APPDATA%\\SteamCloudBridge\\settings.json）。第一次打开时按系统语言自动选："
+        "中文系统给中文，其余一律给英文。想强制指定，用 "
+        "SteamCloudBridgeGUI.exe --lang en。命令行版始终是中文，不受影响。",
+    ),
 )
 
 
@@ -761,13 +845,13 @@ class HelpPage(Page):
         inner = tk.Frame(notice, bg=C["warn_soft"])
         inner.pack(fill="x", padx=18, pady=14)
         tk.Label(
-            inner, text="!  关于魂二：它没有 Steam 云存档，这一点改不了",
+            inner, text=i18n.t("!  关于魂二：它没有 Steam 云存档，这一点改不了"),
             font=theme.fonts().body_bold, bg=C["warn_soft"], fg=C["warn"], anchor="w",
         ).pack(anchor="w")
         tk.Label(
             inner,
             text=(
-                "不是哪一步没做对，也不是设置没开 —— 是这个游戏本身就不提供云存档。\n"
+                i18n.t("不是哪一步没做对，也不是设置没开 —— 是这个游戏本身就不提供云存档。\n"
                 "本机四条证据都对得上：账号配置里没有它的云记录；云日志只有一句\n"
                 "「Not running AutoCloud. No config data found」；存档目录里没有云配置文件；\n"
                 "云端用户目录里根本没有它。Steam 商店页也没标它支持云存档。\n"
@@ -775,7 +859,7 @@ class HelpPage(Page):
                 "第三方替它加不上。\n"
                 "本工具对魂二的方案是「用文件夹搬」：导出成一个文件夹 → 放进你自己的网盘\n"
                 "同步目录或 U 盘 → 换台机器再导入回来（左侧第 5 步「魂2 存档」）。\n"
-                "全程只搬字节，不读、不改存档内容。"
+                "全程只搬字节，不读、不改存档内容。")
             ),
             font=theme.fonts().small, bg=C["warn_soft"], fg=C["text"],
             anchor="w", justify="left", wraplength=theme.px(680),
@@ -784,40 +868,40 @@ class HelpPage(Page):
         card = widgets.Card(self.body, padding=20)
         card.pack(fill="both", expand=True)
 
-        widgets.section_title(card.body, "常见问题").pack(anchor="w")
+        widgets.section_title(card.body, i18n.t("常见问题")).pack(anchor="w")
         box = tk.Frame(card.body, bg=C["surface"])
         box.pack(fill="both", expand=True, pady=(12, 0))
         for i, (q, a) in enumerate(FAQ):
             if i:
                 widgets.hline(box).pack(fill="x", pady=10)
             tk.Label(
-                box, text=q, font=theme.fonts().body_bold, bg=C["surface"],
+                box, text=i18n.t(q), font=theme.fonts().body_bold, bg=C["surface"],
                 fg=C["text"], anchor="w", justify="left",
             ).pack(anchor="w")
             tk.Label(
-                box, text=a, font=theme.fonts().small, bg=C["surface"],
+                box, text=i18n.t(a), font=theme.fonts().small, bg=C["surface"],
                 fg=C["text_dim"], anchor="w", justify="left", wraplength=theme.px(700),
             ).pack(anchor="w", pady=(3, 0))
 
         widgets.hline(card.body).pack(fill="x", pady=(16, 14))
         row = tk.Frame(card.body, bg=C["surface"])
         row.pack(fill="x")
-        widgets.ghost_button(row, "打开存档文件夹", self.open_saves, small=True).pack(side="left")
-        widgets.ghost_button(row, "打开备份文件夹", self.open_backups, small=True).pack(
+        widgets.ghost_button(row, i18n.t("打开存档文件夹"), self.open_saves, small=True).pack(side="left")
+        widgets.ghost_button(row, i18n.t("打开备份文件夹"), self.open_backups, small=True).pack(
             side="left", padx=(10, 0)
         )
-        widgets.ghost_button(row, "看使用说明", self.open_readme, small=True).pack(
+        widgets.ghost_button(row, i18n.t("看使用说明"), self.open_readme, small=True).pack(
             side="left", padx=(10, 0)
         )
 
     def open_saves(self) -> None:
         target = self.env.cloud_root if self.env else None
         if not service.open_path(target):
-            self.banner.show("warn", "还没定位到存档目录。")
+            self.banner.show("warn", i18n.t("还没定位到存档目录。"))
 
     def open_backups(self) -> None:
         if not service.open_path(service.default_backup_root()):
-            self.banner.show("warn", "备份文件夹还不存在（先做一次备份）。")
+            self.banner.show("warn", i18n.t("备份文件夹还不存在（先做一次备份）。"))
 
     def open_readme(self) -> None:
         here = Path(__file__).resolve()
@@ -828,7 +912,7 @@ class HelpPage(Page):
             if cand.is_file():
                 if service.open_path(cand):
                     return
-        self.banner.show("warn", "没找到说明文件。")
+        self.banner.show("warn", i18n.t("没找到说明文件。"))
 
 
 # ---------------------------------------------------------------- 第 5 步: 魂二
@@ -849,29 +933,29 @@ class Ds2Page(Page):
         card = widgets.Card(self.body, padding=20)
         card.pack(fill="x")
 
-        widgets.section_title(card.body, "魂 2 存档").pack(anchor="w")
+        widgets.section_title(card.body, i18n.t("魂 2 存档")).pack(anchor="w")
         widgets.paragraph(
             card.body,
-            "魂二这个游戏，Steam 本身不提供云存档 —— 不是设置没开，是它没有这个功能，\n"
+            i18n.t("魂二这个游戏，Steam 本身不提供云存档 —— 不是设置没开，是它没有这个功能，\n"
             "所以也没有开关可以点亮。\n"
             "替代办法：把存档导出成一个文件夹，放进你自己的网盘同步目录（或 U 盘）；\n"
-            "换台机器再导入回来。工具只搬字节，不读取也不修改存档内容。",
+            "换台机器再导入回来。工具只搬字节，不读取也不修改存档内容。"),
             bg=C["surface"],
         ).pack(anchor="w", pady=(4, 10))
 
         self.where = tk.Label(
-            card.body, text="正在读取…", font=theme.fonts().small, bg=C["surface"],
+            card.body, text=i18n.t("正在读取…"), font=theme.fonts().small, bg=C["surface"],
             fg=C["text_dim"], anchor="w", justify="left", wraplength=theme.px(700),
         )
         self.where.pack(anchor="w", pady=(0, 14))
 
         row = tk.Frame(card.body, bg=C["surface"])
         row.pack(fill="x")
-        self.btn_out = widgets.primary_button(row, "导出到文件夹…", self.do_export)
+        self.btn_out = widgets.primary_button(row, i18n.t("导出到文件夹…"), self.do_export)
         self.btn_out.pack(side="left")
-        self.btn_in = widgets.ghost_button(row, "从文件夹导入…", self.do_import)
+        self.btn_in = widgets.ghost_button(row, i18n.t("从文件夹导入…"), self.do_import)
         self.btn_in.pack(side="left", padx=(10, 0))
-        self.btn_open = widgets.ghost_button(row, "打开存档文件夹", self.open_saves)
+        self.btn_open = widgets.ghost_button(row, i18n.t("打开存档文件夹"), self.open_saves)
         self.btn_open.pack(side="left", padx=(10, 0))
 
         self.progress = tk.Label(
@@ -882,16 +966,16 @@ class Ds2Page(Page):
 
         tip = widgets.Card(self.body, padding=20)
         tip.pack(fill="both", expand=True, pady=(16, 0))
-        widgets.section_title(tip.body, "导出到哪儿？两种都行").pack(anchor="w")
+        widgets.section_title(tip.body, i18n.t("导出到哪儿？两种都行")).pack(anchor="w")
         for name, desc in (
             (
-                "网盘同步目录",
-                "选成 OneDrive／坚果云／Syncthing 这类会自动同步的文件夹。"
-                "之后在另一台机器上打开同一个文件夹，直接导入即可。",
+                i18n.t("网盘同步目录"),
+                i18n.t("选成 OneDrive／坚果云／Syncthing 这类会自动同步的文件夹。"
+                "之后在另一台机器上打开同一个文件夹，直接导入即可。"),
             ),
             (
-                "U 盘 / 移动硬盘",
-                "导出目录直接选 U 盘。插到另一台机器上，用下面的“从文件夹导入”。",
+                i18n.t("U 盘 / 移动硬盘"),
+                i18n.t("导出目录直接选 U 盘。插到另一台机器上，用下面的“从文件夹导入”。"),
             ),
         ):
             line = tk.Frame(tip.body, bg=C["surface"])
@@ -910,7 +994,7 @@ class Ds2Page(Page):
         self.refresh()
 
     def refresh(self) -> None:
-        self.progress.configure(text="正在读取魂二存档目录…")
+        self.progress.configure(text=i18n.t("正在读取魂二存档目录…"))
 
         def work() -> Any:
             return service.ds2_locate()
@@ -918,7 +1002,7 @@ class Ds2Page(Page):
         def done(loc: Any, err: Exception | None) -> None:
             if err is not None:
                 self.progress.configure(text="")
-                self.banner.show("bad", f"读取存档目录失败：{err}")
+                self.banner.show("bad", i18n.t('读取存档目录失败：{0}').format(err))
                 return
             self._loc = loc
             self.render(loc)
@@ -929,8 +1013,8 @@ class Ds2Page(Page):
         self.progress.configure(text="")
         if loc.dir is None:
             self.where.configure(
-                text="没找到魂二存档目录 —— 这台机器还没玩过魂二。\n"
-                "（仍然可以“从文件夹导入”：导入时会按你的账号自动建好目录。）"
+                text=i18n.t("没找到魂二存档目录 —— 这台机器还没玩过魂二。\n"
+                "（仍然可以“从文件夹导入”：导入时会按你的账号自动建好目录。）")
             )
             self.btn_out.configure(state="disabled")
             self.btn_open.configure(state="disabled")
@@ -938,8 +1022,7 @@ class Ds2Page(Page):
             return
         total = sum(f.size for f in loc.files)
         self.where.configure(
-            text=f"存档位置：{loc.dir}\n"
-            f"账号：{loc.accountid}    共 {len(loc.files)} 个文件 · {service.fmt_size(total)}"
+            text=i18n.t('存档位置：{0}\n账号：{1}    共 {2} 个文件 · {3}').format(loc.dir, loc.accountid, len(loc.files), service.fmt_size(total))
         )
         self.btn_out.configure(state="normal" if loc.files else "disabled")
         self.btn_in.configure(state="normal")
@@ -952,21 +1035,21 @@ class Ds2Page(Page):
         if loc is None or loc.dir is None:
             return
         if not service.open_path(loc.dir):
-            self.banner.show("warn", f"打不开：{loc.dir}")
+            self.banner.show("warn", i18n.t('打不开：{0}').format(loc.dir))
 
     def do_export(self) -> None:
         loc = self._loc
         if loc is None or loc.dir is None or not loc.files:
-            self.banner.show("bad", "没有可导出的存档。")
+            self.banner.show("bad", i18n.t("没有可导出的存档。"))
             return
         dest = filedialog.askdirectory(
-            title="选一个文件夹来放存档包（网盘同步目录 / U 盘都可以）",
+            title=i18n.t("选一个文件夹来放存档包（网盘同步目录 / U 盘都可以）"),
         )
         if not dest:
             return
         self.banner.hide()
         self.btn_out.configure(state="disabled")
-        self.progress.configure(text=f"正在导出 {len(loc.files)} 个文件并计算校验值…")
+        self.progress.configure(text=i18n.t('正在导出 {0} 个文件并计算校验值…').format(len(loc.files)))
 
         def work() -> Any:
             return service.ds2_export(loc, dest, label="gui")
@@ -975,25 +1058,24 @@ class Ds2Page(Page):
             self.btn_out.configure(state="normal")
             self.progress.configure(text="")
             if err is not None or not res.ok:
-                self.banner.show("bad", f"导出失败：{err or res.error}")
+                self.banner.show("bad", i18n.t('导出失败：{0}').format(err or res.error))
                 return
             self.banner.show(
                 "ok",
-                f"已导出 {res.file_count} 个文件（{service.fmt_size(res.total_size)}）"
-                f"到 {res.pack_dir}",
+                i18n.t('已导出 {0} 个文件（{1}）到 {2}').format(res.file_count, service.fmt_size(res.total_size), res.pack_dir),
             )
 
         self.app.run_async(work, done)
 
     def do_import(self) -> None:
-        pack_dir = filedialog.askdirectory(title="选择存档包文件夹（里面应有 savepack.json）")
+        pack_dir = filedialog.askdirectory(title=i18n.t("选择存档包文件夹（里面应有 savepack.json）"))
         if not pack_dir:
             return
         ok, problems = service.ds2_verify_pack(pack_dir)
         if not ok:
             self.banner.show(
                 "bad",
-                f"这个包不完整或已损坏：{problems[0] if problems else '未知原因'}",
+                i18n.t('这个包不完整或已损坏：{0}').format(problems[0] if problems else i18n.t('未知原因')),
             )
             return
 
@@ -1002,22 +1084,19 @@ class Ds2Page(Page):
         if target.dir is None:
             self.banner.show(
                 "bad",
-                "定位不到本机的魂二存档目录，也建不出来 —— 请先用命令行加 --account 指定账号。",
+                i18n.t("定位不到本机的魂二存档目录，也建不出来 —— 请先用命令行加 --account 指定账号。"),
             )
             return
 
         if not messagebox.askyesno(
-            "确认导入",
-            f"将把 {manifest.get('file_count')} 个文件"
-            f"（{manifest.get('exported_at')} 导出，来自 {manifest.get('host')}）\n\n"
-            f"导入到：\n{target.dir}\n\n"
-            f"导入前会自动把现有存档备份一份。继续吗？",
+            i18n.t("确认导入"),
+            i18n.t('将把 {0} 个文件（{1} 导出，来自 {2}）\n\n导入到：\n{3}\n\n导入前会自动把现有存档备份一份。继续吗？').format(manifest.get('file_count'), manifest.get('exported_at'), manifest.get('host'), target.dir),
         ):
             return
 
         self.banner.hide()
         self.btn_in.configure(state="disabled")
-        self.progress.configure(text="正在校验并写入（导入前会先备份现有存档）…")
+        self.progress.configure(text=i18n.t("正在校验并写入（导入前会先备份现有存档）…"))
 
         def work() -> Any:
             return service.ds2_import(pack_dir, target)
@@ -1026,10 +1105,10 @@ class Ds2Page(Page):
             self.btn_in.configure(state="normal")
             self.progress.configure(text="")
             if err is not None or not res.ok:
-                self.banner.show("bad", f"导入失败：{err or res.error}")
+                self.banner.show("bad", i18n.t('导入失败：{0}').format(err or res.error))
                 return
-            backup = f"（已备份到 {res.backup_dir}）" if res.backup_dir else ""
-            self.banner.show("ok", f"已写入 {len(res.written)} 个文件{backup}")
+            backup = i18n.t('（已备份到 {0}）').format(res.backup_dir) if res.backup_dir else ""
+            self.banner.show("ok", i18n.t('已写入 {0} 个文件{1}').format(len(res.written), backup))
             self.refresh()
 
         self.app.run_async(work, done)
@@ -1041,11 +1120,7 @@ class Ds2Page(Page):
 def build_app(*, appid: str | None = None, smoke: bool = False, start_page: int = 0) -> App:
     """建好窗口但不进入事件循环 (测试 / 自检用)."""
     app = App(appid=appid, smoke=smoke)
-    pages = [HomePage(app.content, app), BackupPage(app.content, app),
-             PlayPage(app.content, app), HelpPage(app.content, app),
-             Ds2Page(app.content, app)]
-    app._pages = pages
-    app.go(max(0, min(start_page, len(pages) - 1)))
+    app.go(max(0, min(start_page, len(app._pages) - 1)))
     return app
 
 
@@ -1054,7 +1129,7 @@ def run(argv: list[str] | None = None) -> int:
 
     `argv` 只是兜底: 命令行解析在入口 `tools/bridge_gui.py` 里已经做完了.
     """
-    appid, smoke, page = None, False, 0
+    appid, smoke, page, lang = None, False, 0, None
     args = list(argv or [])
     for i, a in enumerate(args):
         if a == "--appid" and i + 1 < len(args):
@@ -1064,8 +1139,14 @@ def run(argv: list[str] | None = None) -> int:
                 page = int(args[i + 1])
             except ValueError:
                 page = 0
+        elif a == "--lang" and i + 1 < len(args):
+            lang = args[i + 1]
         elif a == "--smoke":
             smoke = True
+
+    # 语言必须在建窗**之前**定下来: 界面文案是在建控件时取值的.
+    # `detect()` 的优先级 = 显式参数 > SCB_LANG > 存下来的设置 > 系统语言 > 中文.
+    i18n.set_lang(i18n.detect(lang))
 
     try:
         app = build_app(appid=appid, smoke=smoke, start_page=page)

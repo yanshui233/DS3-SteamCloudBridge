@@ -44,6 +44,7 @@ PCGamingWiki 的 *Save game cloud syncing* 表里该栏为空).
 """
 
 from __future__ import annotations
+from .. import i18n
 
 import hashlib
 import json
@@ -63,6 +64,8 @@ __all__ = [
     "PACK_SCHEMA",
     "MANIFEST_NAME",
     "NOTE_NAME",
+    "NOTE_NAME_EN",
+    "note_name",
     "PROFILE",
     "GameProfile",
     "SaveFile",
@@ -82,6 +85,20 @@ __all__ = [
 PACK_SCHEMA = "scb-savepack/1"
 MANIFEST_NAME = "savepack.json"
 NOTE_NAME = "先读我.txt"
+"""包里那份说明文件的**中文**名."""
+
+NOTE_NAME_EN = "READ-ME-FIRST.txt"
+"""同一个文件的英文名. 见 `note_name`."""
+
+
+def note_name() -> str:
+    """包里的说明文件叫什么 —— **跟随界面语言**.
+
+    它不算契约: 导出时写一份给人读, 导入端只认 `savepack.json` 与 `files/`,
+    **从不按名字找它**. 所以英文界面下换个能念出来的文件名是安全的, 也让海外
+    用户不至于对着一个中文文件名发愣.
+    """
+    return NOTE_NAME_EN if i18n.current() == "en" else NOTE_NAME
 
 #: 存档目录里这些不该进包 —— `.co2.bak` 是联机 mod 自己的轮转备份, 十个起步、
 #: 每个都是一份完整存档大小, 搬来搬去只占地方, 且永远不该被"还原"回去.
@@ -115,6 +132,10 @@ PROFILE = GameProfile(
     core_globs=("*.sl2", "*.co2"),
     exe_names=("DarkSoulsII.exe",),
     steam_cloud=False,
+    # ⚠ 这里是**模块级常量**, 文案必须留中文原文、不能写成 `i18n.t(...)` ——
+    # 那样会把语言冻结在 import 时刻 (界面切到英文后这里仍是当初那句中文).
+    # 该字段目前只作代码里的说明用 (界面不读它); 真要显示时按 STEPS/FAQ 的做法
+    # 在渲染那一刻 `i18n.t()`.
     notes=(
         "魂二没有 Steam 云存档, 跨机搬运靠你指定的目录 (同步盘 / U 盘)",
         "存档与账号绑定: 只搬自己账号的档",
@@ -326,16 +347,16 @@ def locate(
     loc = SaveLocation(appid=str(appid))
     root = _appdata_root(appdata_dir)
     if root is None:
-        loc.notes.append("读不到 %APPDATA%, 无法定位存档目录")
+        loc.notes.append(i18n.t("读不到 %APPDATA%, 无法定位存档目录"))
         return loc
 
     base = root / PROFILE.save_subdir
-    loc.evidence.append(f"存档根: {base}")
+    loc.evidence.append(i18n.t('存档根: {0}').format(base))
 
     candidates = _scan_account_dirs(base)
     if candidates:
         loc.evidence.append(
-            "磁盘上找到的账号目录: "
+            i18n.t("磁盘上找到的账号目录: ")
             + ", ".join(f"{d.name} (accountid={aid})" for d, aid in candidates)
         )
 
@@ -348,7 +369,7 @@ def locate(
         active = accounts.get_active_accountid()
         if active is not None:
             wanted = active
-            loc.evidence.append(f"磁盘上的账号目录不足以判定, 取本机当前账号 accountid={active}")
+            loc.evidence.append(i18n.t('磁盘上的账号目录不足以判定, 取本机当前账号 accountid={0}').format(active))
 
     picked: tuple[Path, int] | None = None
     if len(candidates) == 1:
@@ -357,8 +378,7 @@ def locate(
         # 那种冲突不能吞掉, 否则用户以为按自己说的走了.
         if accountid is not None and int(accountid) != picked[1]:
             loc.notes.append(
-                f"你指定的是 accountid={accountid}, 但磁盘上只有一个账号目录 "
-                f"({picked[0].name} -> {picked[1]}) —— 按磁盘证据优先选用它"
+                i18n.t('你指定的是 accountid={0}, 但磁盘上只有一个账号目录 ({1} -> {2}) —— 按磁盘证据优先选用它').format(accountid, picked[0].name, picked[1])
             )
     elif candidates and wanted is not None:
         for d, aid in candidates:
@@ -367,8 +387,7 @@ def locate(
                 break
         if picked is None:
             loc.notes.append(
-                f"磁盘上的账号目录没有一个属于 accountid={wanted}; "
-                f"找到的是 {[aid for _, aid in candidates]} —— 拒绝猜哪个是你"
+                i18n.t('磁盘上的账号目录没有一个属于 accountid={0}; 找到的是 {1} —— 拒绝猜哪个是你').format(wanted, [aid for _, aid in candidates])
             )
     elif wanted is not None and create:
         target = base / accounts.accountid_to_hex_dir(int(wanted))
@@ -376,39 +395,37 @@ def locate(
         loc.accountid = int(wanted)
         loc.created = True
         loc.evidence.append(
-            f"磁盘上没有账号目录, 按已验证规则(SteamID64 十六进制)生成: {target.name}"
+            i18n.t('磁盘上没有账号目录, 按已验证规则(SteamID64 十六进制)生成: {0}').format(target.name)
         )
-        loc.notes.append("该目录本次是新按规则确定的, 不是磁盘上实测到的 —— 请确认账号无误")
+        loc.notes.append(i18n.t("该目录本次是新按规则确定的, 不是磁盘上实测到的 —— 请确认账号无误"))
         return loc
 
     if picked is None:
         if not candidates:
             loc.notes.append(
-                f"{base} 下没有任何账号目录 —— 本机没玩过魂二, 或存档在别处"
+                i18n.t('{0} 下没有任何账号目录 —— 本机没玩过魂二, 或存档在别处').format(base)
             )
         else:
             # 多个候选却定不下是哪个: 不猜, 但要说清楚"为什么没定下来",
             # 否则用户只看到"未定位", 不知道下一步该做什么.
             loc.notes.append(
-                f"存档根下有 {len(candidates)} 个账号目录 "
-                f"(accountid={[aid for _, aid in candidates]}), 但无法确定哪个是本机账号"
-                f" —— 请用 --account <accountid> 指定"
+                i18n.t('存档根下有 {0} 个账号目录 (accountid={1}), 但无法确定哪个是本机账号 —— 请用 --account <accountid> 指定').format(len(candidates), [aid for _, aid in candidates])
             )
         return loc
 
     save_dir, aid = picked
     loc.dir = save_dir
     loc.accountid = aid
-    loc.evidence.append(f"选中 {save_dir.name} -> accountid={aid}")
+    loc.evidence.append(i18n.t('选中 {0} -> accountid={1}').format(save_dir.name, aid))
 
     if with_files:
         loc.files = _list_saves(save_dir, include_all=include_all)
-        loc.evidence.append(f"目录内 {len(loc.files)} 个文件计入 (include_all={include_all})")
+        loc.evidence.append(i18n.t('目录内 {0} 个文件计入 (include_all={1})').format(len(loc.files), include_all))
 
     # 核心存档缺失是很强的信号: 目录在但里面没档, 多半是装过没玩过 / 刚被清过.
     core_hit = [f for f in loc.files if f.rel.lower().endswith((".sl2", ".co2"))]
     if with_files and not core_hit:
-        loc.notes.append("账号目录存在, 但里面没有 .sl2 / .co2 存档 —— 导出会得到空包")
+        loc.notes.append(i18n.t("账号目录存在, 但里面没有 .sl2 / .co2 存档 —— 导出会得到空包"))
 
     return loc
 
@@ -440,29 +457,29 @@ class ExportResult:
 
 def _note_text(loc: SaveLocation, manifest: dict[str, Any]) -> str:
     lines = [
-        f"魂二存档包 —— {PROFILE.name}",
+        i18n.t('魂二存档包 —— {0}').format(PROFILE.name),
         "",
-        f"导出时间 : {manifest['exported_at']}",
-        f"来源机器 : {manifest['host']}",
-        f"账号     : accountid={manifest['accountid']}  (SteamID64={manifest['steamid64']})",
-        f"文件     : {manifest['file_count']} 个, 共 {manifest['total_size']:,} 字节",
+        i18n.t('导出时间 : {0}').format(manifest['exported_at']),
+        i18n.t('来源机器 : {0}').format(manifest['host']),
+        i18n.t('账号     : accountid={0}  (SteamID64={1})').format(manifest['accountid'], manifest['steamid64']),
+        i18n.t('文件     : {0} 个, 共 {1:,} 字节').format(manifest['file_count'], manifest['total_size']),
         "",
-        "里面是什么:",
-        "  savepack.json   清单 (每个文件的 sha256, 导入时逐字节核对; 别改它)",
-        "  files/          存档本体",
+        i18n.t("里面是什么:"),
+        i18n.t("  savepack.json   清单 (每个文件的 sha256, 导入时逐字节核对; 别改它)"),
+        i18n.t("  files/          存档本体"),
         "",
-        "怎么用:",
-        "  1. 把这个文件夹整个放到一个能跨机同步的地方 (网盘同步目录 / U 盘)",
-        "  2. 在另一台机器上用工具执行: 从文件夹导入",
-        "  3. 导入前会自动备份那台机器上的现有存档",
+        i18n.t("怎么用:"),
+        i18n.t("  1. 把这个文件夹整个放到一个能跨机同步的地方 (网盘同步目录 / U 盘)"),
+        i18n.t("  2. 在另一台机器上用工具执行: 从文件夹导入"),
+        i18n.t("  3. 导入前会自动备份那台机器上的现有存档"),
         "",
-        "注意:",
-        "  * 魂二没有 Steam 云存档, 这个包就是你的\"云\"",
-        "  * 只适用于同一 Steam 账号; 换账号导入会被工具拒绝",
-        "  * 导入时请务必先退出游戏 (工具也会检查)",
+        i18n.t("注意:"),
+        i18n.t("  * 魂二没有 Steam 云存档, 这个包就是你的\"云\""),
+        i18n.t("  * 只适用于同一 Steam 账号; 换账号导入会被工具拒绝"),
+        i18n.t("  * 导入时请务必先退出游戏 (工具也会检查)"),
     ]
     if loc.notes:
-        lines += ["", "本次导出备注:"] + [f"  - {n}" for n in loc.notes]
+        lines += ["", i18n.t("本次导出备注:")] + [f"  - {n}" for n in loc.notes]
     return "\n".join(lines) + "\n"
 
 
@@ -481,7 +498,7 @@ def export_pack(
         <dest>/
             savepack.json    清单 (最后写 —— 它的存在即"导出完整"的标志)
             files/           存档本体
-            先读我.txt
+            先读我.txt        说明 (英文界面下叫 READ-ME-FIRST.txt, 见 `note_name`)
 
     清单**最后落盘**, 读取端也只认"清单 + 逐文件哈希全对". 导出中途失败会留下一个
     没有清单的半成品, 读取端会明确报错, 而不是把半包当整包用.
@@ -490,14 +507,14 @@ def export_pack(
     """
     res = ExportResult()
     if loc.dir is None or not loc.dir.is_dir():
-        res.error = "存档目录未定位 (先跑 locate / status)"
+        res.error = i18n.t("存档目录未定位 (先跑 locate / status)")
         return res
 
     files = loc.files
     if rehash or not files:
         files = _list_saves(loc.dir, include_all=include_all)
     if not files:
-        res.error = f"存档目录里没有可导出的文件: {loc.dir}"
+        res.error = i18n.t('存档目录里没有可导出的文件: {0}').format(loc.dir)
         return res
 
     dest = Path(dest)
@@ -505,7 +522,7 @@ def export_pack(
     try:
         files_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        res.error = f"无法创建包目录 {files_dir}: {exc}"
+        res.error = i18n.t('无法创建包目录 {0}: {1}').format(files_dir, exc)
         return res
 
     copied: list[dict[str, Any]] = []
@@ -513,7 +530,7 @@ def export_pack(
     for f in files:
         src = loc.dir / f.rel
         if not src.is_file():
-            res.error = f"导出途中源文件消失: {src}"
+            res.error = i18n.t('导出途中源文件消失: {0}').format(src)
             return res
         try:
             shutil.copyfile(src, files_dir / f.rel)
@@ -521,7 +538,7 @@ def export_pack(
             # 与"显式控制时间戳"的项目纪律冲突, 且跨盘/跨文件系统行为不一致).
             os.utime(files_dir / f.rel, (f.mtime, f.mtime))
         except OSError as exc:
-            res.error = f"复制失败 {src}: {exc}"
+            res.error = i18n.t('复制失败 {0}: {1}').format(src, exc)
             return res
         copied.append(f.to_dict())
         total += f.size
@@ -549,9 +566,9 @@ def export_pack(
         (dest / MANIFEST_NAME).write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        (dest / NOTE_NAME).write_text(_note_text(loc, manifest), encoding="utf-8")
+        (dest / note_name()).write_text(_note_text(loc, manifest), encoding="utf-8")
     except OSError as exc:
-        res.error = f"写清单失败: {exc}"
+        res.error = i18n.t('写清单失败: {0}').format(exc)
         return res
 
     res.ok = True
@@ -573,21 +590,20 @@ def read_pack(pack_dir: str | Path) -> dict[str, Any]:
     if not path.is_file():
         # 兼容"直接把 files/ 里的东西拷过来"的用法: 明确说清缺什么.
         raise ValueError(
-            f"这不是一个完整的存档包: 找不到 {MANIFEST_NAME} ({pack_dir}). "
-            f"多半是导出没跑完, 或把 files/ 里的文件单独拷了出来."
+            i18n.t('这不是一个完整的存档包: 找不到 {0} ({1}). 多半是导出没跑完, 或把 files/ 里的文件单独拷了出来.').format(MANIFEST_NAME, pack_dir)
         )
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(f"清单读不出来 ({path}): {exc}") from exc
+        raise ValueError(i18n.t('清单读不出来 ({0}): {1}').format(path, exc)) from exc
     if not isinstance(data, dict):
-        raise ValueError(f"清单格式不对 ({path}): 顶层不是对象")
+        raise ValueError(i18n.t('清单格式不对 ({0}): 顶层不是对象').format(path))
     schema = str(data.get("schema", ""))
     if not schema.startswith("scb-savepack/"):
-        raise ValueError(f"清单 schema 不认识: {schema!r} (期望 scb-savepack/…)")
+        raise ValueError(i18n.t('清单 schema 不认识: {0} (期望 scb-savepack/…)').format(repr(schema)))
     if str(data.get("appid", "")) != PROFILE.appid:
         raise ValueError(
-            f"这个包是 appid={data.get('appid')!r} 的, 不是魂二 ({PROFILE.appid})"
+            i18n.t('这个包是 appid={0} 的, 不是魂二 ({1})').format(repr(data.get('appid')), PROFILE.appid)
         )
     return data
 
@@ -604,20 +620,20 @@ def verify_pack(pack_dir: str | Path) -> tuple[bool, list[str]]:
     files_dir = pack_dir / "files"
     entries = manifest.get("files") or []
     if not entries:
-        problems.append("清单里没有任何文件 —— 空包")
+        problems.append(i18n.t("清单里没有任何文件 —— 空包"))
     for raw in entries:
         f = SaveFile.from_dict(raw if isinstance(raw, dict) else {})
         p = files_dir / f.rel
         if not p.is_file():
-            problems.append(f"缺少文件: {f.rel}")
+            problems.append(i18n.t('缺少文件: {0}').format(f.rel))
             continue
         actual_size = p.stat().st_size
         if f.size and actual_size != f.size:
-            problems.append(f"大小不符: {f.rel} (清单 {f.size}, 实际 {actual_size})")
+            problems.append(i18n.t('大小不符: {0} (清单 {1}, 实际 {2})').format(f.rel, f.size, actual_size))
         if f.sha256:
             actual = sha256_of(p)
             if actual != f.sha256:
-                problems.append(f"内容不符(sha256): {f.rel}")
+                problems.append(i18n.t('内容不符(sha256): {0}').format(f.rel))
     return (not problems), problems
 
 
@@ -665,7 +681,7 @@ def _backup_dir_now(target: Path, backup_root: str | Path) -> Path:
                 if p.is_file():
                     shutil.copyfile(p, dest / p.name)
             except OSError as exc:
-                raise OSError(f"备份 {p} 失败: {exc}") from exc
+                raise OSError(i18n.t('备份 {0} 失败: {1}').format(p, exc)) from exc
     return dest
 
 
@@ -713,7 +729,7 @@ def import_pack(
     # --- 1) 清单 + 哈希 ---
     ok, problems = verify_pack(pack_dir)
     if not ok:
-        res.error = "包校验未通过, 拒绝导入"
+        res.error = i18n.t("包校验未通过, 拒绝导入")
         res.blockers = problems
         return res
 
@@ -723,15 +739,14 @@ def import_pack(
     # --- 2) 账号 ---
     pack_account = manifest.get("accountid")
     if pack_account is None:
-        res.notes.append("包清单里没有 accountid (老版本导出的包?) —— 无法核对账号归属")
+        res.notes.append(i18n.t("包清单里没有 accountid (老版本导出的包?) —— 无法核对账号归属"))
     if target.dir is None:
-        res.error = "目标存档目录未定位"
+        res.error = i18n.t("目标存档目录未定位")
         return res
     if target.accountid is not None and pack_account is not None:
         if int(pack_account) != int(target.accountid):
             res.error = (
-                f"跨账号: 包属于 accountid={pack_account}, 本机目标目录属于 "
-                f"accountid={target.accountid} —— 拒绝导入"
+                i18n.t('跨账号: 包属于 accountid={0}, 本机目标目录属于 accountid={1} —— 拒绝导入').format(pack_account, target.accountid)
             )
             res.blockers.append("CROSS_ACCOUNT")
             return res
@@ -739,17 +754,17 @@ def import_pack(
     # --- 3) 游戏进程 ---
     running = game_running()
     if running is True:
-        res.error = f"{PROFILE.exe_names[0]} 正在运行 —— 退出游戏后再导入"
+        res.error = i18n.t('{0} 正在运行 —— 退出游戏后再导入').format(PROFILE.exe_names[0])
         res.blockers.append("GAME_RUNNING")
         return res
     if running is None:
-        res.notes.append("无法判断游戏是否在运行 (tasklist 不可用) —— 请自行确认已退出游戏")
+        res.notes.append(i18n.t("无法判断游戏是否在运行 (tasklist 不可用) —— 请自行确认已退出游戏"))
 
     res.target_dir = str(target.dir)
     if dry_run:
         res.ok = True
         res.written = [f.rel for f in entries]
-        res.notes.append("dry-run: 未写任何文件")
+        res.notes.append(i18n.t("dry-run: 未写任何文件"))
         return res
 
     # --- 4) 强制备份 ---
@@ -758,18 +773,18 @@ def import_pack(
         try:
             dest = _backup_dir_now(target.dir, root)
         except OSError as exc:
-            res.error = f"备份失败, 已中止 (一个字都没写): {exc}"
+            res.error = i18n.t('备份失败, 已中止 (一个字都没写): {0}').format(exc)
             res.blockers.append("BACKUP_FAILED")
             return res
         res.backup_dir = str(dest)
     else:
-        res.notes.append("目标目录本来就没有文件, 无需备份")
+        res.notes.append(i18n.t("目标目录本来就没有文件, 无需备份"))
 
     # --- 5) 写入 ---
     try:
         target.dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        res.error = f"无法创建目标目录 {target.dir}: {exc}"
+        res.error = i18n.t('无法创建目标目录 {0}: {1}').format(target.dir, exc)
         return res
 
     files_dir = pack_dir / "files"
@@ -778,16 +793,16 @@ def import_pack(
         dst = target.dir / f.rel
         # 只往存档目录里写"裸文件名", 防目录穿越 (清单是外部输入, 不能信)
         if Path(f.rel).name != f.rel or "/" in f.rel or "\\" in f.rel:
-            res.blockers.append(f"清单里的文件名含路径分隔符, 拒绝: {f.rel!r}")
-            res.error = "清单里有可疑文件名, 已中止"
+            res.blockers.append(i18n.t('清单里的文件名含路径分隔符, 拒绝: {0}').format(repr(f.rel)))
+            res.error = i18n.t("清单里有可疑文件名, 已中止")
             return res
         try:
             _write_atomic(src, dst, f.mtime)
         except OSError as exc:
-            res.error = f"写入失败 {dst}: {exc}"
+            res.error = i18n.t('写入失败 {0}: {1}').format(dst, exc)
             return res
         if sha256_of(dst) != f.sha256:
-            res.error = f"写入后校验不符: {dst} —— 目标盘可能有问题"
+            res.error = i18n.t('写入后校验不符: {0} —— 目标盘可能有问题').format(dst)
             return res
         res.written.append(f.rel)
 
